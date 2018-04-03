@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 
@@ -38,31 +39,25 @@ func getClientQueue() (*sqs.SQS, *sqs.GetQueueUrlOutput) {
 	)
 
 	//Cria client para comunicação
-	svc := sqs.New(sess)
+	client := sqs.New(sess)
 
 	//Busca url da queue pelo o nome
-	resultURL, err := svc.GetQueueUrl(&sqs.GetQueueUrlInput{
+	resultURL, err := client.GetQueueUrl(&sqs.GetQueueUrlInput{
 		QueueName: aws.String(queueName),
 	})
 
 	if err != nil {
 		log.Fatal("Error to connect queue :(")
 	}
-	return svc, resultURL
+	return client, resultURL
 }
 
-func getMesageQueue(svc *sqs.SQS, ulr *sqs.GetQueueUrlOutput) {
+func getMesageQueue(client *sqs.SQS, ulr *sqs.GetQueueUrlOutput) {
 	//Recebe mensagem da fila
-	result, err := svc.ReceiveMessage(&sqs.ReceiveMessageInput{
-		QueueUrl: ulr.QueueUrl,
-		AttributeNames: []*string{
-			aws.String(sqs.MessageSystemAttributeNameSentTimestamp),
-		},
-		MessageAttributeNames: []*string{
-			aws.String(sqs.QueueAttributeNameAll),
-		},
+	result, err := client.ReceiveMessage(&sqs.ReceiveMessageInput{
+		QueueUrl:            ulr.QueueUrl,
 		MaxNumberOfMessages: aws.Int64(1),
-		VisibilityTimeout:   aws.Int64(36000),
+		VisibilityTimeout:   aws.Int64(20),
 		WaitTimeSeconds:     aws.Int64(10),
 	})
 
@@ -75,10 +70,13 @@ func getMesageQueue(svc *sqs.SQS, ulr *sqs.GetQueueUrlOutput) {
 	//verifica se veio alguma mensagem
 	if len(result.Messages) > 0 {
 
+		var messageQueue = bodyMessageQueue{}
+		_ = json.Unmarshal([]byte(*result.Messages[0].Body), &messageQueue)
+
 		fmt.Println(result.Messages)
 
 		//Delete a mensagem
-		resultDelete, err := svc.DeleteMessage(&sqs.DeleteMessageInput{
+		resultDelete, err := client.DeleteMessage(&sqs.DeleteMessageInput{
 			QueueUrl:      ulr.QueueUrl,
 			ReceiptHandle: result.Messages[0].ReceiptHandle,
 		})
@@ -95,4 +93,9 @@ func getMesageQueue(svc *sqs.SQS, ulr *sqs.GetQueueUrlOutput) {
 	} else {
 		queueChannel <- true
 	}
+}
+
+type bodyMessageQueue struct {
+	Situacao string
+	Produtos []int
 }
